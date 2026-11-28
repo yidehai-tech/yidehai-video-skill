@@ -32,7 +32,7 @@
 | 形态 | 标识 | 费用口径 | 旁白 | 底层管线 | 适用场景 |
 | :--- | :--- | :--- | :---: | :--- | :--- |
 | **`大字报`** | `poster` | 免费（0 点） | ✕ | `render_poster.py`（离线直出） | 8.8s 风景空镜 + 分段高亮/逐层浮现大字报，高频日更主力 |
-| **`动效片`** | `motion` | 免费（0 点） | ✓（AI） | OpenMotion / HyperFrames | 10s 多屏卡片动效 + 5 套浅色主题轮换 |
+| **`动效片`** | `motion` | 免费（0 点） | ✓（AI） | OpenMotion / HyperFrames | 10s 多屏卡片动效 · 7 套 MotionFace 风格母版 × 5 套浅色主题轮换 |
 | **`实拍混剪`** | `montage` | 免费（0 点） | ✓（AI） | `package_ai_video.py` + HeyGen HyperFrames | 3 段本地实拍视频/图片防重拼接 + 干声旁白 |
 | **`实拍快剪`** | `fastcut` | 免费（0 点） | ✓（AI） | `render_footage_video.py`（离线零浏览器） | 6–8 个 1.2–2.0s 快切实拍短镜头 + 卡点字幕 |
 | **`前后对比片`** | `before_after` | 免费（0 点） | ✓（AI） | `render_footage_video.py`（离线零浏览器） | 上下分屏对比（清理前 vs 清空后徽章）+ 强共鸣口播 |
@@ -137,6 +137,8 @@ yidehai-video/
 ├── README.md                              # 项目说明文档
 ├── config.example.json                    # 本地配置结构示例（实际运行配置位于 .yidehai/config.json）
 ├── .gitignore                             # 忽略 .yidehai/、outputs/* 成片与临时文件
+├── assets/
+│   └── sfx/                               # [内置·纯离线 CC0] 动效片 5 组 UI 卡点微音效（支持同名 wav/mp3 替换）
 ├── .yidehai/                              # [自动生成·不入库] 本地配置、密钥、防重账本、任务台账与缓存
 ├── outputs/                               # [本地产物·不入库] 所有成片 MP4、双封面、审片台与 dashboard.html
 │   └── .gitkeep
@@ -166,6 +168,7 @@ yidehai-video/
     ├── api_image_runner.py                # 云端聚合生图调度器（复用 API 余额为图文故事片自动出图）
     ├── batch_runner.py                    # 批量出片调度器（断点续跑 + 可视化审片台 review.html）
     ├── task_tracker.py                    # 跨 Agent 共享任务台账（.yidehai/tasks.json）与离线仪表盘（outputs/dashboard.html）
-    ├── motion_templates.py                # 动效片三套 MotionFace 风格母版（split_compare / pack_archive / ranking，5 套浅色主题轮换）
+    ├── motion_templates.py                # 动效片 7 套 MotionFace 风格母版（一卡拆两类/归档/榜单/流程/反转/数字/便签 × 5 浅色主题）
+    ├── sfx_manager.py                     # 内置离线 CC0 UI 微音效包生成与按时间轴自动混音器
     ├── fetch_om_components.py             # OpenMotion native 组件镜像补齐与 sha256 校验脚本
     └── link_skill.py                      # [已废弃兼容桩] v2.x 旧指令兼容转发至 setup_project.py

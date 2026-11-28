@@ -27,6 +27,7 @@ sys.path.insert(0, str(SCRIPTS_DIR))
 import media_manager
 import motion_templates
 import render_poster
+import sfx_manager
 import task_tracker
 
 TYPE_ALIASES = {
@@ -126,7 +127,7 @@ def detect_openmotion_runtime() -> dict | None:
 
 
 def build_motion_html_project(item: dict, proj_dir: Path, idx: int = 0) -> str:
-    """调用三套 MotionFace 风格高质感动效片母版（split_compare 一卡拆两类 / pack_archive 卡片归档 / ranking 排名攀升）生成工程。"""
+    """调用 7 套 MotionFace 风格高质感动效片母版（split_compare / pack_archive / ranking / step_flow / myth_flip / metric_spotlight / prep_memo）生成工程。"""
     return motion_templates.build_motion_project(item, proj_dir, fallback_index=idx)
 
 
@@ -232,6 +233,7 @@ def run_one_item(
     # 仅成员明确要求 --silent 或确无真实音源时回落无声版，并在结果里写明原因。
     bgm_label = "silent"
     voice_label = "none"
+    sfx_label = "off"
     slug_name = item.get("slug", item_id)
     silent_mp4 = item_dir / f"{slug_name}-无声版.mp4"
     if not item.get("silent", silent_default):
@@ -240,6 +242,23 @@ def run_one_item(
         ledger_path = Path(cfg["ledger_path"])
         ledger = render_poster.load_ledger(ledger_path)
         duration = max(3.0, float(item.get("duration", 10.0)))
+
+        # 0) 合成内置离线 CC0 UI 微音效卡点音轨（可通过 item["sfx"]=False 关闭）
+        sfx_enabled = bool(item.get("sfx", True))
+        sfx_bed_wav = item_dir / "_sfx_bed.wav"
+        sfx_cue_count = 0
+        cues_file = proj_dir / "sfx_cues.json"
+        if sfx_enabled and cues_file.exists():
+            sfx_cues = sfx_manager.load_cues(cues_file)
+            if sfx_cues:
+                sfx_cue_count = sfx_manager.render_sfx_bed(
+                    sfx_cues,
+                    duration,
+                    sfx_bed_wav,
+                    ffmpeg_path=om_runtime["ffmpeg_path"],
+                )
+        if sfx_cue_count > 0:
+            sfx_label = f"built-in({sfx_cue_count} cues)"
 
         # 1) 可选合成中文旁白（优先用 voiceover_text，否则取标题+正文前 55 字）
         vo_text = str(item.get("voiceover_text") or "").strip()
@@ -289,36 +308,115 @@ def run_one_item(
         if has_voice and picked_bgm is not None:
             bgm_src, bgm_start = picked_bgm
             tempo = _probe_voice_tempo()
-            mux_proc = subprocess.run([
+            mux_cmd = [
                 om_runtime["ffmpeg_path"], "-y", "-v", "error",
                 "-i", str(out_mp4),
                 "-i", str(voice_mp3),
                 "-stream_loop", "-1", "-ss", f"{bgm_start:.2f}", "-t", f"{duration:.2f}", "-i", str(bgm_src),
-                "-filter_complex",
+            ]
+            fc = (
                 f"[1:a]aresample=48000,atempo={tempo:.3f},loudnorm=I=-14:TP=-1.5:LRA=7,apad,atrim=0:{max(1.0, duration-0.4):.2f}[v];"
                 f"[2:a]atrim=0:{duration:.2f},asetpts=PTS-STARTPTS,aresample=48000,loudnorm=I=-16:TP=-2:LRA=11,afade=t=in:st=0:d=0.6,afade=t=out:st={fade_out_st:.2f}:d=0.9,volume=0.18[b];"
-                f"[v][b]amix=inputs=2:normalize=0:duration=longest:dropout_transition=0,alimiter=limit=0.95[a]",
+            )
+            if sfx_cue_count > 0:
+                mux_cmd.extend(["-i", str(sfx_bed_wav)])
+                fc += (
+                    f"[3:a]aresample=48000,volume=0.38[s];"
+                    f"[v][b][s]amix=inputs=3:normalize=0:duration=longest:dropout_transition=0,alimiter=limit=0.95[a]"
+                )
+            else:
+                fc += "[v][b]amix=inputs=2:normalize=0:duration=longest:dropout_transition=0,alimiter=limit=0.95[a]"
+            mux_cmd.extend([
+                "-filter_complex", fc,
                 "-map", "0:v:0", "-map", "[a]",
                 "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
                 "-t", f"{duration:.2f}", "-movflags", "+faststart",
                 str(muxed_mp4),
-            ], capture_output=True, text=True)
+            ])
+            mux_proc = subprocess.run(mux_cmd, capture_output=True, text=True)
             if mux_proc.returncode == 0 and muxed_mp4.exists():
                 muxed_mp4.replace(out_mp4)
                 render_poster.save_ledger(ledger_path, ledger)
-                bgm_label = f"{bgm_src.name}@{bgm_start:.1f}s(loudnorm+18%)"
+                sfx_tag = "+sfx" if sfx_cue_count > 0 else ""
+                bgm_label = f"{bgm_src.name}@{bgm_start:.1f}s(loudnorm+18%{sfx_tag})"
                 mux_ok = True
             else:
                 audio_note = f"旁白+BGM 混音失败：{(mux_proc.stderr or '')[-200:]}"
         elif has_voice:
             # 补齐「仅旁白」分支：无 BGM 时绝不丢弃已生成的中文旁白
             tempo = _probe_voice_tempo()
-            mux_proc = subprocess.run([
+            mux_cmd = [
                 om_runtime["ffmpeg_path"], "-y", "-v", "error",
                 "-i", str(out_mp4),
                 "-i", str(voice_mp3),
+            ]
+            if sfx_cue_count > 0:
+                mux_cmd.extend(["-i", str(sfx_bed_wav)])
+                fc = (
+                    f"[1:a]aresample=48000,atempo={tempo:.3f},loudnorm=I=-14:TP=-1.5:LRA=7,apad,atrim=0:{max(1.0, duration-0.4):.2f}[v];"
+                    f"[2:a]aresample=48000,volume=0.38[s];"
+                    f"[v][s]amix=inputs=2:normalize=0:duration=longest:dropout_transition=0,alimiter=limit=0.95[a]"
+                )
+            else:
+                fc = f"[1:a]aresample=48000,atempo={tempo:.3f},loudnorm=I=-14:TP=-1.5:LRA=7,apad,atrim=0:{duration:.2f},alimiter=limit=0.95[a]"
+            mux_cmd.extend([
+                "-filter_complex", fc,
+                "-map", "0:v:0", "-map", "[a]",
+                "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
+                "-t", f"{duration:.2f}", "-movflags", "+faststart",
+                str(muxed_mp4),
+            ])
+            mux_proc = subprocess.run(mux_cmd, capture_output=True, text=True)
+            if mux_proc.returncode == 0 and muxed_mp4.exists():
+                muxed_mp4.replace(out_mp4)
+                bgm_label = "voice+sfx-no-bgm" if sfx_cue_count > 0 else "voice-only-no-bgm-source"
+                audio_note = "本机未找到真实 BGM，已保留中文旁白" + ("+内置卡点音效（无背景音乐）。" if sfx_cue_count > 0 else "（无背景音乐）。")
+                mux_ok = True
+            else:
+                audio_note = f"纯旁白混音失败：{(mux_proc.stderr or '')[-200:]}"
+        elif picked_bgm is not None:
+            bgm_src, bgm_start = picked_bgm
+            mux_cmd = [
+                om_runtime["ffmpeg_path"], "-y", "-v", "error",
+                "-i", str(out_mp4),
+                "-stream_loop", "-1", "-ss", f"{bgm_start:.2f}", "-t", f"{duration:.2f}", "-i", str(bgm_src),
+            ]
+            fc = (
+                f"[1:a]atrim=0:{duration:.2f},asetpts=PTS-STARTPTS,aresample=48000,"
+                f"loudnorm=I=-16:TP=-2:LRA=11,afade=t=in:st=0:d=0.6,afade=t=out:st={fade_out_st:.2f}:d=0.9,volume=0.18[b];"
+            )
+            if sfx_cue_count > 0:
+                mux_cmd.extend(["-i", str(sfx_bed_wav)])
+                fc += (
+                    f"[2:a]aresample=48000,volume=0.52[s];"
+                    f"[b][s]amix=inputs=2:normalize=0:duration=longest:dropout_transition=0,alimiter=limit=0.95[a]"
+                )
+            else:
+                fc += "[b]alimiter=limit=0.95[a]"
+            mux_cmd.extend([
+                "-filter_complex", fc,
+                "-map", "0:v:0", "-map", "[a]",
+                "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
+                "-t", f"{duration:.2f}", "-movflags", "+faststart",
+                str(muxed_mp4),
+            ])
+            mux_proc = subprocess.run(mux_cmd, capture_output=True, text=True)
+            if mux_proc.returncode == 0 and muxed_mp4.exists():
+                muxed_mp4.replace(out_mp4)
+                render_poster.save_ledger(ledger_path, ledger)
+                sfx_tag = "+sfx" if sfx_cue_count > 0 else ""
+                bgm_label = f"{bgm_src.name}@{bgm_start:.1f}s(loudnorm+18%{sfx_tag})"
+                audio_note = "edge-tts 未就绪，本次混入真实无版权 BGM" + ("+内置卡点音效（无旁白）。" if sfx_cue_count > 0 else "（无旁白）。")
+                mux_ok = True
+            else:
+                audio_note = f"BGM 混音失败：{(mux_proc.stderr or '')[-200:]}"
+        elif sfx_cue_count > 0:
+            mux_proc = subprocess.run([
+                om_runtime["ffmpeg_path"], "-y", "-v", "error",
+                "-i", str(out_mp4),
+                "-i", str(sfx_bed_wav),
                 "-filter_complex",
-                f"[1:a]aresample=48000,atempo={tempo:.3f},loudnorm=I=-14:TP=-1.5:LRA=7,apad,atrim=0:{duration:.2f},alimiter=limit=0.95[a]",
+                f"[1:a]aresample=48000,volume=0.60,alimiter=limit=0.95[a]",
                 "-map", "0:v:0", "-map", "[a]",
                 "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
                 "-t", f"{duration:.2f}", "-movflags", "+faststart",
@@ -326,35 +424,16 @@ def run_one_item(
             ], capture_output=True, text=True)
             if mux_proc.returncode == 0 and muxed_mp4.exists():
                 muxed_mp4.replace(out_mp4)
-                bgm_label = "voice-only-no-bgm-source"
-                audio_note = "本机未找到真实 BGM，已保留中文旁白（无背景音乐）。"
+                bgm_label = "sfx-only-no-voice-bgm"
+                audio_note = "未检测到 edge-tts 且无真实 BGM 源，仅混入内置离线卡点音效。"
                 mux_ok = True
             else:
-                audio_note = f"纯旁白混音失败：{(mux_proc.stderr or '')[-200:]}"
-        elif picked_bgm is not None:
-            bgm_src, bgm_start = picked_bgm
-            mux_proc = subprocess.run([
-                om_runtime["ffmpeg_path"], "-y", "-v", "error",
-                "-i", str(out_mp4),
-                "-stream_loop", "-1", "-ss", f"{bgm_start:.2f}", "-i", str(bgm_src),
-                "-map", "0:v:0", "-map", "1:a:0",
-                "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-ac", "2",
-                "-af", f"volume=0.12,afade=t=in:st=0:d=0.6,afade=t=out:st={fade_out_st:.2f}:d=0.9",
-                "-t", f"{duration:.2f}", "-movflags", "+faststart",
-                str(muxed_mp4),
-            ], capture_output=True, text=True)
-            if mux_proc.returncode == 0 and muxed_mp4.exists():
-                muxed_mp4.replace(out_mp4)
-                render_poster.save_ledger(ledger_path, ledger)
-                bgm_label = f"{bgm_src.name}@{bgm_start:.1f}s(12%)"
-                audio_note = "edge-tts 未就绪，本次仅混入真实无版权 BGM（无旁白）。"
-                mux_ok = True
-            else:
-                audio_note = f"BGM 混音失败：{(mux_proc.stderr or '')[-200:]}"
+                audio_note = f"纯音效混音失败：{(mux_proc.stderr or '')[-200:]}"
         else:
             bgm_label = "silent-no-audio-source"
             audio_note = "未检测到 edge-tts 且无真实 BGM 源，回落为无声版。"
         voice_mp3.unlink(missing_ok=True)
+        sfx_bed_wav.unlink(missing_ok=True)
 
         # 用 ffprobe 验证最终文件确实含音轨，按真实交付完整度标记 done / degraded / failed
         ap = subprocess.run([
@@ -406,6 +485,7 @@ def run_one_item(
         "silent_mp4": str(silent_mp4) if silent_mp4.exists() else "",
         "voice": voice_label,
         "bgm": bgm_label,
+        "sfx": sfx_label,
         "audio_note": audio_note,
         "cover_9x16": str(cover_9x16) if cover_9x16.exists() else "",
         "cover_3x4": str(cover_3x4) if cover_3x4.exists() else "",

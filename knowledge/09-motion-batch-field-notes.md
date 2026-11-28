@@ -106,7 +106,13 @@ ffmpeg -y -v error -i silent.mp4 -i voice.mp3 -i bgm_10s.wav \
 - `alimiter=limit=0.95` 防削波；`-c:v copy` 不重编码画面。
 - 验收：`ffprobe` 确认含音轨、时长 10.000s；`volumedetect` mean 约 −18～−20 dB、max 不削波（本机实测 mean −18.5～−19.2 dB）。
 
-### 3.4 双版本与署名
+### 3.4 内置离线 UI 卡点微音效（`assets/sfx/`）
+
+- 仓库内置 5 个纯离线 CC0 轻音效（`whoosh` 切卡、`pop` 弹出、`ding` 入袋确认、`tap` 划掉轻敲、`chime` 达标印章）。
+- `motion_templates.py` 会按 GSAP 动画关键帧秒数自动输出 `sfx_cues.json`，`batch_runner.py` 混音时自动叠加（人声旁白存在时 SFX 系数 `0.38`，无旁白纯 BGM 时 `0.52`，绝不盖过台词）。
+- 如需单条禁用可在条目 JSON 设 `"sfx": false`；如需自定义音色，直接将同名 `<name>.wav` 或 `<name>.mp3` 放入 `assets/sfx/` 即可替换。
+
+### 3.5 双版本与署名
 
 - `{slug}.mp4` = **有声版**（默认发布用）；`{slug}-无声版.mp4` = 同配色无声版（改挂平台热门音乐时用，规避跨平台版权静音）。
 - BGM 带署名要求时，**发布文案与交接备注必须写明署名**。
@@ -117,7 +123,7 @@ ffmpeg -y -v error -i silent.mp4 -i voice.mp3 -i bgm_10s.wav \
 ## 四、渲染稳定性：优先用 `motion_templates.py` 或浅色改版旧底版
 
 - **不要从零自写 CSS `@keyframes` 动效工程**：在 HyperFrames 的 seek 下只有第 1 屏有画面，后续屏全空；内联 delay → class delay、ID 级规则、scene 前缀 ID、去 opacity 基类、加 stage 动画均试过无效。
-- **优先直接使用已内置 3 套 MotionFace 风格新母版（`split_compare` 一卡拆两类 / `pack_archive` 卡片归档 / `ranking` 排名攀升）与 5 套浅色主题的 `scripts/motion_templates.py`**；若要复用本机已出过片的 OpenMotion 历史底版（旧羽绒服 A / 打包3件事 B / 怕坑秤 C，其中部分底版原版为深绿背景）：
+- **优先直接使用已内置 7 套 MotionFace 风格新母版（`split_compare` 一卡拆两类 / `pack_archive` 卡片归档 / `ranking` 排名攀升 / `step_flow` 三步流程 / `myth_flip` 误区反转 / `metric_spotlight` 大数字聚焦 / `prep_memo` 打包便签）× 5 套浅色主题（35 种视觉组合）的 `scripts/motion_templates.py`**；若要复用本机已出过片的 OpenMotion 历史底版（旧羽绒服 A / 打包3件事 B / 怕坑秤 C，其中部分底版原版为深绿背景）：
   - **【强制硬规 · 单条也不例外】复用旧底版后，必须按上方第二节 2.3/2.4 注入 5 套浅色主题之一替换整屏背景！** 严禁偷懒保留 `#102A22` 深绿裸背景直接出片；
   - 按 `data-hf-id` 精确替换文案 + 删品牌浮条块 + **同步改 `index.html` 的 `data-composition-variables` 默认值**（否则标题仍是旧文案）。
 - 带红色删除线的节点替换时保持「被划掉」语义（如「留着占窝」），写反会变成「都不用自己扛」被划掉。

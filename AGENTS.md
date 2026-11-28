@@ -112,8 +112,8 @@ python3 scripts/media_manager.py preflight --track <poster|motion|montage|fastcu
 - **路径 P：`大字报`（0 点 · 离线直出 · 支持 `**关键词**` 主题色高亮与逐段轻浮现动效）**
   - `python3 scripts/render_poster.py --job job.json --out-dir outputs --organize-by-date`（默认已配 `-16 LUFS` 清晰无版权 BGM；正文推荐 2–3 自然段空行分隔、每段 1–2 处 `**关键词**` 高亮；仅成员明确说「无声版」才加 `--silent`）。
 - **路径 A：`动效片`（0 点 · OpenMotion）**
-  - 按 `00-auto-setup.md` 与 `06-rendering-playbook.md` 确认 OpenMotion 就绪；**无论是单条还是批量，出片前均必读 `09-motion-batch-field-notes.md`**——**严禁以深森林绿 `#102A22` 作整屏背景裸出！** 优先用内置 3 套 MotionFace 风格新母版（`split_compare` 一卡拆两类 / `pack_archive` 卡片归档 / `ranking` 排名攀升）+ 5 套浅色主题的 `motion_templates.py`，若复用旧 OpenMotion 底版也必须注入浅色主题 CSS 替换整屏背景，lint 0 报错后前台同步渲染，**无品牌浮条、无静态尾卡**。
-  - **默认出有声版**：中文口播旁白（`-14 LUFS`）+ 真实无版权 BGM（`-16 LUFS × 18%`），同时保留同配色无声版供平台挂载热门音乐。
+  - 按 `00-auto-setup.md` 与 `06-rendering-playbook.md` 确认 OpenMotion 就绪；**无论是单条还是批量，出片前均必读 `09-motion-batch-field-notes.md`**——**严禁以深森林绿 `#102A22` 作整屏背景裸出！** 优先用内置 7 套 MotionFace 风格新母版（`split_compare` 一卡拆两类 / `pack_archive` 卡片归档 / `ranking` 排名攀升 / `step_flow` 三步流程 / `myth_flip` 误区反转 / `metric_spotlight` 大数字聚焦 / `prep_memo` 打包便签）× 5 套浅色主题（35 种不重样组合）的 `motion_templates.py`，若复用旧 OpenMotion 底版也必须注入浅色主题 CSS 替换整屏背景，lint 0 报错后前台同步渲染，**无品牌浮条、无静态尾卡**。
+  - **默认出有声版**：中文口播旁白（`-14 LUFS`）+ 真实无版权 BGM（`-16 LUFS × 18%`）+ 内置离线 CC0 UI 微音效自动卡点（`assets/sfx/`，跟随 GSAP 关键帧触发，可在条目中设 `"sfx": false` 关闭），同时保留同配色无声版供平台挂载热门音乐。
 - **路径 M：`实拍混剪`（0 点 · 3 段本地实拍 + Edge-TTS + HeyGen HyperFrames）**
   - 自动检测/安装 `heygen-com/hyperframes` 与 `edge-tts`；
   - 调用 `python3 scripts/media_manager.py footage --count 3` 抽取 3 个未用过的本地实拍视频/图片；
